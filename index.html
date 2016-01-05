@@ -9,8 +9,20 @@
   <meta name="author" content="Ma Tingchen">
 
   
-  <meta name="description" content="既然是第一篇笔记，那就从Python的&#95;&#95;new&#95;&#95;和&#95;&#95;init&#95;&#95;开始吧。 以下内容均针对Python3 先上官方文档：
-https://docs.python.org/3/reference/datamodel.html# &hellip;">
+  <meta name="description" content="在Python中，任何东西都是对象。函数是对象，类也是对象，类的类也是对象。
+Example0.py1
+2
+3
+4
+5
+6
+def foo(): pass type(foo)
+type(type(foo))
+type(type(type(foo))) 输出：
+1
+2
+3
+&lt;class &# &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -68,6 +80,548 @@ https://docs.python.org/3/reference/datamodel.html# &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/01/05/metaclass/">Metaclass</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2016-01-05T10:36:01+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>5</span><span class='date-suffix'>th</span>, <span class='date-year'>2016</span></span> <span class='time'>10:36 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>
+在Python中，任何东西都是对象。函数是对象，类也是对象，类的类也是对象。
+<figure class='code'><figcaption><span>Example0.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='py3'><span class='line'><span class="k">def</span> <span class="nf">foo</span><span class="p">():</span>
+</span><span class='line'>    <span class="k">pass</span>
+</span><span class='line'>
+</span><span class='line'><span class="nb">type</span><span class="p">(</span><span class="n">foo</span><span class="p">)</span>
+</span><span class='line'><span class="nb">type</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">foo</span><span class="p">))</span>
+</span><span class='line'><span class="nb">type</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">foo</span><span class="p">)))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+输出：
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>&lt;class <span class="s1">&#39;function&#39;</span>&gt;
+</span><span class='line'>&lt;class <span class="s1">&#39;type&#39;</span>&gt;
+</span><span class='line'>&lt;class <span class="s1">&#39;type&#39;</span>&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+可以看到，foo是function的对象，function是type的对象，type是type的对象。
+</p>
+
+
+<h2>type</h2>
+
+
+<p>type是python中的一个builtin类，并非关键字(<a href="https://docs.python.org/3/reference/lexical_analysis.html#keywords">Python Keywords</a>)。<br />
+有两种方式可以调用type，分别产生两种效果:</p>
+
+<pre><code>* 当只有一个参数时，也就是上面例子中的用法，type返回参数中对象的类
+* 当有三个参数时，type生成一个新的类。
+</code></pre>
+
+<p>我们只看第一种用法。以下是python3.5.1中的C实现：</p>
+
+<figure class='code'><figcaption><span>typeobject.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+</span><span class='line'><span class="nf">type_new</span><span class="p">(</span><span class="n">PyTypeObject</span> <span class="o">*</span><span class="n">metatype</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">kwds</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="c1">// 省略部分代码</span>
+</span><span class='line'>    <span class="cm">/* Special case: type(x) should return x-&gt;ob_type */</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>        <span class="k">const</span> <span class="n">Py_ssize_t</span> <span class="n">nargs</span> <span class="o">=</span> <span class="n">PyTuple_GET_SIZE</span><span class="p">(</span><span class="n">args</span><span class="p">);</span>
+</span><span class='line'>        <span class="k">const</span> <span class="n">Py_ssize_t</span> <span class="n">nkwds</span> <span class="o">=</span> <span class="n">kwds</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">?</span> <span class="mi">0</span> <span class="o">:</span> <span class="n">PyDict_Size</span><span class="p">(</span><span class="n">kwds</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">PyType_CheckExact</span><span class="p">(</span><span class="n">metatype</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">nargs</span> <span class="o">==</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span> <span class="n">nkwds</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">PyObject</span> <span class="o">*</span><span class="n">x</span> <span class="o">=</span> <span class="n">PyTuple_GET_ITEM</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'>            <span class="n">Py_INCREF</span><span class="p">(</span><span class="n">Py_TYPE</span><span class="p">(</span><span class="n">x</span><span class="p">));</span>
+</span><span class='line'>            <span class="k">return</span> <span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="p">)</span> <span class="n">Py_TYPE</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="cm">/* SF bug 475327 -- if that didn&#39;t trigger, we need 3</span>
+</span><span class='line'><span class="cm">           arguments. but PyArg_ParseTupleAndKeywords below may give</span>
+</span><span class='line'><span class="cm">           a msg saying type() needs exactly 3. */</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">nargs</span> <span class="o">+</span> <span class="n">nkwds</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="n">PyErr_SetString</span><span class="p">(</span><span class="n">PyExc_TypeError</span><span class="p">,</span>
+</span><span class='line'>                            <span class="s">&quot;type() takes 1 or 3 arguments&quot;</span><span class="p">);</span>
+</span><span class='line'>            <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// 省略部分代码</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>可以看到这里有一个特殊处理：当只args中只有一个参数时，type(x)会直接返回这一个参数的类。</p>
+
+
+
+
+<h2>Metaclass</h2>
+
+
+<p>通过type，我们可以知道一个对象的类究竟是什么。从第一个例子中可以看出，函数是function类的对象，类是type类的对象，type类自己也是type类的对象。<strong>类的类就是metaclass</strong>。</p>
+
+
+<p>如果我们在创建一个类时，没有特别指明一个metaclass，那么这个类就会使用type类作为自己的metaclass。</p>
+
+
+<p>类决定了对象的行为，同理，作为类的类，metaclass决定了一个类在生成对象时的行为。</p>
+
+
+
+
+<p>
+metaclass可以是任何可被调用的类型，类或者函数都可以。<br />
+Python3为metaclass引入了一个新的函数:<strong>&#95;&#95;prepare&#95;&#95;</strong>，这个函数会在对象创建前被调用并返回一个字典。这个字典不一定是内置的dict，只要实现了部分必须的接口就可以。这个字典中存储了对象的成员。由于可以是自己实现的dict，我们可以对其进行各种操作。
+</p>
+
+
+<p>所以，通过&#95;&#95;prepare&#95;&#95;, &#95;&#95;new&#95;&#95;, &#95;&#95;init&#95;&#95;等函数，我们可以控制生成对象时的一些行为。</p>
+
+
+<p>以下是PEP3115中的例子，最后稍做了一点改动，用来输出结果：</p>
+
+<figure class='code'><figcaption><span>PEP3115_Example1.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+</pre></td><td class='code'><pre><code class='python3'><span class='line'><span class="c"># Here&#39;s a simple example of a metaclass which creates a list of</span>
+</span><span class='line'><span class="c"># the names of all class members, in the order that they were</span>
+</span><span class='line'><span class="c"># declared:</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The custom dictionary</span>
+</span><span class='line'><span class="k">class</span> <span class="nc">member_table</span><span class="p">(</span><span class="nb">dict</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="bp">self</span><span class="o">.</span><span class="n">member_names</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+</span><span class='line'>        <span class="c"># if the key is not already defined, add to the</span>
+</span><span class='line'>        <span class="c"># list of keys.</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+</span><span class='line'>            <span class="bp">self</span><span class="o">.</span><span class="n">member_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c"># Call superclass</span>
+</span><span class='line'>        <span class="nb">dict</span><span class="o">.</span><span class="n">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="c"># The metaclass</span>
+</span><span class='line'><span class="k">class</span> <span class="nc">OrderedClass</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># The prepare function</span>
+</span><span class='line'>    <span class="nd">@classmethod</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__prepare__</span><span class="p">(</span><span class="n">metacls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">):</span> <span class="c"># No keywords in this case</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">member_table</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># The metaclass invocation</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">classdict</span><span class="p">):</span>
+</span><span class='line'>        <span class="c"># Note that we replace the classdict with a regular</span>
+</span><span class='line'>        <span class="c"># dict before passing it to the superclass, so that we</span>
+</span><span class='line'>        <span class="c"># don&#39;t continue to record member names after the class</span>
+</span><span class='line'>        <span class="c"># has been created.</span>
+</span><span class='line'>        <span class="n">result</span> <span class="o">=</span> <span class="nb">type</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">classdict</span><span class="p">))</span>
+</span><span class='line'>        <span class="n">result</span><span class="o">.</span><span class="n">member_names</span> <span class="o">=</span> <span class="n">classdict</span><span class="o">.</span><span class="n">member_names</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">result</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">MyClass</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">OrderedClass</span><span class="p">):</span>
+</span><span class='line'>    <span class="c"># method1 goes in array element 0</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">method1</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">pass</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># method2 goes in array element 1</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">method2</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">pass</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="n">__name__</span><span class="o">==</span><span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="n">MyClass</span><span class="p">()</span><span class="o">.</span><span class="n">member_names</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>输出：</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span><span class="s1">&#39;__module__&#39;</span>, <span class="s1">&#39;__qualname__&#39;</span>, <span class="s1">&#39;method1&#39;</span>, <span class="s1">&#39;method2&#39;</span><span class="o">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>该例子中：</p>
+
+<pre><code>1. 创建了一个member_table，继承自dict并重载了__setitem__函数，按顺序记录所有key。
+2. 声明了一个新的metaclass -- OrderedClass。
+    2.1 __prepare__函数返回一个member_table对象
+    2.2 __new__函数中将member_table里记录的key复制给自己的一个成员变量member_names。
+3. 申明了一个metaclass为OrderedClass的类，声明两个成员函数。这两个成员函数的名称会被存储在member_names中。
+</code></pre>
+
+<p>当一个对象被创建时，以下工作会被按顺序执行</p>
+
+<blockquote><p>When a class definition is executed, the following steps occur:</p><p>    * the appropriate metaclass is determined<br/>    * the class namespace is prepared<br/>    * the class body is executed<br/>    * the class object is created</p><footer><strong>docs.python.org</strong> <cite><a href='https://docs.python.org/3/reference/datamodel.html#customizing-class-creation'>Customizing Class Creation</a></cite></footer></blockquote>
+
+
+
+
+<p>以下是对应的代码：
+<figure class='code'><figcaption><span>Lib/types.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+</pre></td><td class='code'><pre><code class='py3'><span class='line'><span class="c"># Provide a PEP 3115 compliant mechanism for class creation</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">new_class</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwds</span><span class="o">=</span><span class="k">None</span><span class="p">,</span> <span class="n">exec_body</span><span class="o">=</span><span class="k">None</span><span class="p">):</span>
+</span><span class='line'>    <span class="sd">&quot;&quot;&quot;Create a class object dynamically using the appropriate metaclass.&quot;&quot;&quot;</span>
+</span><span class='line'>    <span class="n">meta</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">kwds</span> <span class="o">=</span> <span class="n">prepare_class</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">kwds</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="n">exec_body</span> <span class="ow">is</span> <span class="ow">not</span> <span class="k">None</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">exec_body</span><span class="p">(</span><span class="n">ns</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">meta</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="o">**</span><span class="n">kwds</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="nf">prepare_class</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwds</span><span class="o">=</span><span class="k">None</span><span class="p">):</span>
+</span><span class='line'>    <span class="sd">&quot;&quot;&quot;Call the __prepare__ method of the appropriate metaclass.</span>
+</span><span class='line'>
+</span><span class='line'><span class="sd">    Returns (metaclass, namespace, kwds) as a 3-tuple</span>
+</span><span class='line'>
+</span><span class='line'><span class="sd">    *metaclass* is the appropriate metaclass</span>
+</span><span class='line'><span class="sd">    *namespace* is the prepared class namespace</span>
+</span><span class='line'><span class="sd">    *kwds* is an updated copy of the passed in kwds argument with any</span>
+</span><span class='line'><span class="sd">    &#39;metaclass&#39; entry removed. If no kwds argument is passed in, this will</span>
+</span><span class='line'><span class="sd">    be an empty dict.</span>
+</span><span class='line'><span class="sd">    &quot;&quot;&quot;</span>
+</span><span class='line'>    <span class="k">if</span> <span class="n">kwds</span> <span class="ow">is</span> <span class="k">None</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">kwds</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">kwds</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">kwds</span><span class="p">)</span> <span class="c"># Don&#39;t alter the provided mapping</span>
+</span><span class='line'>    <span class="k">if</span> <span class="s">&#39;metaclass&#39;</span> <span class="ow">in</span> <span class="n">kwds</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">meta</span> <span class="o">=</span> <span class="n">kwds</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;metaclass&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>        <span class="k">if</span> <span class="n">bases</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">meta</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">bases</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span class='line'>        <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">meta</span> <span class="o">=</span> <span class="nb">type</span>
+</span><span class='line'>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+</span><span class='line'>        <span class="c"># when meta is a type, we first determine the most-derived metaclass</span>
+</span><span class='line'>        <span class="c"># instead of invoking the initial candidate directly</span>
+</span><span class='line'>        <span class="n">meta</span> <span class="o">=</span> <span class="n">_calculate_meta</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">bases</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="s">&#39;__prepare__&#39;</span><span class="p">):</span>
+</span><span class='line'>        <span class="n">ns</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">__prepare__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="o">**</span><span class="n">kwds</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">else</span><span class="p">:</span>
+</span><span class='line'>        <span class="n">ns</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">meta</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">kwds</span>
+</span></code></pre></td></tr></table></div></figure>
+
+以上代码解释了metaclass中的&#95;&#95;prepare&#95;&#95;在何时被调用以及完成了哪些工作。</p>
+
+
+
+
+<p>再简单看一下metaclass在type_new函数中如何工作。以下代码只保留了我们关心的部分。
+<figure class='code'><figcaption><span>typeobject.c</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="n">PyObject</span> <span class="o">*</span>
+</span><span class='line'><span class="nf">type_new</span><span class="p">(</span><span class="n">PyTypeObject</span> <span class="o">*</span><span class="n">metatype</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">PyObject</span> <span class="o">*</span><span class="n">kwds</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="c1">// ..........................</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="cm">/* Determine the proper metatype to deal with this: */</span>
+</span><span class='line'>    <span class="n">winner</span> <span class="o">=</span> <span class="n">_PyType_CalculateMetaclass</span><span class="p">(</span><span class="n">metatype</span><span class="p">,</span> <span class="n">bases</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">winner</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">winner</span> <span class="o">!=</span> <span class="n">metatype</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">winner</span><span class="o">-&gt;</span><span class="n">tp_new</span> <span class="o">!=</span> <span class="n">type_new</span><span class="p">)</span> <span class="cm">/* Pass it to the winner */</span>
+</span><span class='line'>            <span class="k">return</span> <span class="n">winner</span><span class="o">-&gt;</span><span class="n">tp_new</span><span class="p">(</span><span class="n">winner</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwds</span><span class="p">);</span>
+</span><span class='line'>        <span class="n">metatype</span> <span class="o">=</span> <span class="n">winner</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// ............................</span>
+</span><span class='line'>
+</span><span class='line'>     <span class="cm">/* Allocate the type object */</span>
+</span><span class='line'>    <span class="n">type</span> <span class="o">=</span> <span class="p">(</span><span class="n">PyTypeObject</span> <span class="o">*</span><span class="p">)</span><span class="n">metatype</span><span class="o">-&gt;</span><span class="n">tp_alloc</span><span class="p">(</span><span class="n">metatype</span><span class="p">,</span> <span class="n">nslots</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// ..............................</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="p">(</span><span class="n">PyObject</span> <span class="o">*</span><span class="p">)</span><span class="n">type</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+首先还是选取一个合适的metaclass，如果选出的metaclass不是当前参数中的metatype，那么执行选出的metatype->tp_new。然后为类申请空间、进行初始化工作。最后返回该类。</p>
+
+
+
+
+<h2>实践</h2>
+
+
+<p>最后，我们用metaclass来实现一个简单的singleton。
+<figure class='code'><figcaption><span>Example2.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='py3'><span class='line'><span class="k">class</span> <span class="nc">Singleton</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
+</span><span class='line'>    <span class="n">instance</span> <span class="o">=</span> <span class="k">None</span>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">if</span> <span class="ow">not</span> <span class="n">cls</span><span class="o">.</span><span class="n">instance</span><span class="p">:</span>
+</span><span class='line'>            <span class="n">cls</span><span class="o">.</span><span class="n">instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">cls</span><span class="o">.</span><span class="n">instance</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">cls</span><span class="o">.</span><span class="n">__name__</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">ASingleton</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">Singleton</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">pass</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">class</span> <span class="nc">BSingleton</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">Singleton</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">pass</span>
+</span><span class='line'>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+</span><span class='line'>    <span class="n">a1</span> <span class="o">=</span> <span class="n">ASingleton</span><span class="p">()</span>
+</span><span class='line'>    <span class="n">a2</span> <span class="o">=</span> <span class="n">ASingleton</span><span class="p">()</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="s">&#39;a1 is a2? %s&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">a1</span> <span class="ow">is</span> <span class="n">a2</span><span class="p">))</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="n">a1</span><span class="o">.</span><span class="n">__class__</span><span class="p">)</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="n">a2</span><span class="o">.</span><span class="n">__class__</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="s">&#39;===============&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">b</span> <span class="o">=</span> <span class="n">BSingleton</span><span class="p">()</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="s">&#39;a1 is b? %s&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">a1</span> <span class="ow">is</span> <span class="n">b</span><span class="p">))</span>
+</span><span class='line'>    <span class="nb">print</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">__class__</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+输出：
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>a1 is a2? True
+</span><span class='line'>ASingleton
+</span><span class='line'><span class="nv">ASingleton</span>
+</span><span class='line'><span class="o">===============</span>
+</span><span class='line'>a1.instance is ASingleton.instance?
+</span><span class='line'><span class="nv">True</span>
+</span><span class='line'><span class="o">===============</span>
+</span><span class='line'>a1 is b? False
+</span><span class='line'>BSingleton
+</span></code></pre></td></tr></table></div></figure>
+
+</p>
+
+
+<p>
+在这个例子中，我们创建了一个名为Singleton的metaclass。Singleton带有一个静态成员变量instance。在调用ASingleton或BSingleton创建对象时，会先检查instance是否为空。<br />需要注意的是，在第一次调用时，我们访问的是metaclass的静态成员变量instance。当对象被创建出来之后，这个对象会被赋值给各自class的instance（注意__call__的第一个参数 cls）。之后再通过ASingleton或BSingleton创建对象时，访问的是它们各自的类的instance，而不是metaclass的instance。<br />另外，由于使用的是类的instance，即相当于该class的静态成员变量，而不是生成出的对象的成员变量，所以相同的类的object所访问的都是同一个instance。
+</p>
+
+
+
+
+<h2></h2>
+
+
+<h4>参考：</h4>
+
+
+<ul>
+<li><a href="https://www.python.org/dev/peps/pep-3115/">PEP 3115 -- Metaclasses in Python 3000</a></li>
+<li><a href="https://docs.python.org/3/reference/datamodel.html#customizing-class-creation">Data model - Python 3.5.1 documentation</a></li>
+<li><a href="http://stackoverflow.com/questions/100003/what-is-a-metaclass-in-python">oop - What is a metaclass in Python? - Stack Overflow</a></li>
+<li><a href="http://blog.ionelmc.ro/2015/02/09/understanding-python-metaclasses/">Understanding Python metaclasses | ionel's codelog</a></li>
+<li><a href="https://en.wikibooks.org/wiki/Python_Programming/Metaclasses">Python Programming/Metaclasses - Wikibooks, open books for an open world</a></li>
+<li><a href="http://python-3-patterns-idioms-test.readthedocs.org/en/latest/Metaprogramming.html">Metaprogramming - Python 3 Patterns, Recipes and Idioms</a></li>
+</ul>
+
+
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -286,6 +840,10 @@ https://docs.python.org/3/reference/datamodel.html# &hellip;">
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/01/05/metaclass/">Metaclass</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/12/21/new-and-and-init/">__new__ &amp;&amp; __init__</a>
       </li>
     
@@ -302,7 +860,7 @@ https://docs.python.org/3/reference/datamodel.html# &hellip;">
     </div>
   </div>
   <footer role="contentinfo"><p>
-  Copyright &copy; 2015 - Ma Tingchen -
+  Copyright &copy; 2016 - Ma Tingchen -
   <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
 </p>
 
